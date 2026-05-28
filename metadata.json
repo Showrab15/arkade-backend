@@ -1,0 +1,6 @@
+{
+  "name": "E-commerce Backend Service",
+  "description": "A clean, scalable, professional REST API backend for an e-commerce brand, featuring secure JWT authentication, role management, product management, basket checkout flows, wishlist, newsletter sub, and contact messages.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
