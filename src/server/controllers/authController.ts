@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { getCollection, toObjectId } from "../db.js";
 import { generateToken, AuthenticatedRequest } from "../middleware/auth.js";
 import { sendSuccess, sendError, sendValidationError } from "../utils/response.js";
+import { firebaseAdminAuth } from "../lib/firebaseAdmin.js";
 
 const usersCollection = getCollection("users");
 
@@ -283,5 +284,181 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
     return sendSuccess(res, `User account [${user.email}] deleted successfully.`, { userId: id });
   } catch (error) {
     return sendError(res, "Failed to delete user.", error, 500);
+  }
+};
+
+
+export const firebaseLogin = async (req: Request, res: Response) => {
+  const { idToken, name, photoURL } = req.body;
+
+  if (!idToken) {
+    return sendValidationError(res, "Firebase ID token is required.", {
+      idToken: "ID token is mandatory."
+    });
+  }
+
+  try {
+    const decodedToken = await firebaseAdminAuth.verifyIdToken(idToken);
+
+    const email = decodedToken.email?.toLowerCase();
+
+    if (!email) {
+      return sendError(res, "Firebase account does not contain an email.", null, 400);
+    }
+
+    if (!decodedToken.email_verified) {
+      return res.status(403).json({
+        success: false,
+        message: "Your email is not verified yet. Please verify your email before logging in.",
+        details: {
+          isVerified: false
+        }
+      });
+    }
+
+    let user = await usersCollection.findOne({ email });
+
+    if (!user) {
+      const newUser = {
+        email,
+        password: "FIREBASE_AUTH_MANAGED",
+        name: name || decodedToken.name || email.split("@")[0],
+        image: photoURL || decodedToken.picture || "",
+        firebaseUid: decodedToken.uid,
+        isVerified: true,
+        role: "user" as const,
+        createdAt: new Date().toISOString()
+      };
+
+      const result = await usersCollection.insertOne(newUser);
+      user = { _id: result.insertedId, ...newUser };
+    } else {
+      await usersCollection.updateOne(
+        { email },
+        {
+          $set: {
+            isVerified: true,
+            firebaseUid: decodedToken.uid,
+            name: name || decodedToken.name || user.name,
+            image: photoURL || decodedToken.picture || user.image || ""
+          }
+        }
+      );
+
+      user = {
+        ...user,
+        isVerified: true,
+        firebaseUid: decodedToken.uid,
+        name: name || decodedToken.name || user.name,
+        image: photoURL || decodedToken.picture || user.image || ""
+      };
+    }
+
+    const token = generateToken({
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role || "user",
+      name: user.name
+    });
+
+    return sendSuccess(res, "Firebase login successful", {
+      token,
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        role: user.role || "user",
+        name: user.name,
+        image: user.image || "",
+        isVerified: true
+      }
+    });
+  } catch (error) {
+    return sendError(res, "Firebase authentication failed.", error, 401);
+  }
+};
+
+
+export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return sendError(res, "Unauthorized: User context missing.", null, 401);
+    }
+
+    const user = await usersCollection.findOne({
+      _id: toObjectId(req.user.id)
+    });
+
+    if (!user) {
+      return sendError(res, "User profile not found.", null, 404);
+    }
+
+    const { password, ...safeUser } = user;
+
+    return sendSuccess(res, "Profile retrieved successfully.", safeUser);
+  } catch (error) {
+    return sendError(res, "Failed to retrieve profile.", error, 500);
+  }
+};
+
+export const updateProfile = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return sendError(res, "Unauthorized: User context missing.", null, 401);
+    }
+
+    const { name, phone, address, district } = req.body;
+
+    const updates: Record<string, any> = {};
+
+    if (typeof name === "string") updates.name = name.trim();
+    if (typeof phone === "string") updates.phone = phone.trim();
+    if (typeof address === "string") updates.address = address.trim();
+    if (typeof district === "string") updates.district = district.trim();
+
+    if (Object.keys(updates).length === 0) {
+      return sendValidationError(res, "No valid profile fields provided.", {
+        fields: "Allowed fields: name, phone, address, district."
+      });
+    }
+
+    updates.updatedAt = new Date().toISOString();
+
+    await usersCollection.updateOne(
+      { _id: toObjectId(req.user.id) },
+      { $set: updates }
+    );
+
+    const updatedUser = await usersCollection.findOne({
+      _id: toObjectId(req.user.id)
+    });
+
+    if (!updatedUser) {
+      return sendError(res, "User profile not found after update.", null, 404);
+    }
+
+    const { password, ...safeUser } = updatedUser;
+
+    return sendSuccess(res, "Profile updated successfully.", safeUser);
+  } catch (error) {
+    return sendError(res, "Failed to update profile.", error, 500);
+  }
+};
+
+
+export const getUserById = async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const user = await usersCollection.findOne({ _id: toObjectId(id) });
+
+    if (!user) {
+      return sendError(res, "User not found.", null, 404);
+    }
+
+    const { password, ...safeUser } = user;
+
+    return sendSuccess(res, "User retrieved successfully.", safeUser);
+  } catch (error) {
+    return sendError(res, "Failed to retrieve user.", error, 500);
   }
 };
