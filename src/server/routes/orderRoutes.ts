@@ -1,10 +1,13 @@
+
+
 // import { Router } from "express";
 // import { 
 //   checkoutOrder, 
 //   getOrders, 
 //   getOrderById, 
 //   updateOrderStatus, 
-//   getDistricts 
+//   getDistricts,
+//   trackOrder
 // } from "../controllers/orderController.js";
 // import { verifyJWT, verifyAdmin } from "../middleware/auth.js";
 
@@ -19,6 +22,9 @@
 // // Admin-only: Retrieve all customer orders in system
 // router.get("/", verifyJWT, verifyAdmin, getOrders);
 
+// // Public Order Tracking
+// router.get("/track/:orderId", trackOrder);
+
 // // Admin / Guest: Extract individual order details
 // router.get("/:id", getOrderById);
 
@@ -28,36 +34,47 @@
 // export default router;
 
 
-
 import { Router } from "express";
-import { 
-  checkoutOrder, 
-  getOrders, 
-  getOrderById, 
-  updateOrderStatus, 
+import {
+  checkoutOrder,
+  getOrders,
+  getOrderById,
+  updateOrderStatus,
   getDistricts,
-  trackOrder
+  trackOrder,
+  getDeliveryChargeEndpoint,  // ← NEW
+  cancelOrderByCustomer,       // ← NEW
 } from "../controllers/orderController.js";
 import { verifyJWT, verifyAdmin } from "../middleware/auth.js";
 
 const router = Router();
 
-// Retrieve list of 64 districts of Bangladesh grouped by 8 Division states
+// ── Public ──────────────────────────────────────────────────────────────────
+
+// Get all Bangladesh divisions + districts
 router.get("/districts", getDistricts);
 
-// Public Checkout: place order from Buy Now, Cart, or Wishlist selection
+// Calculate delivery charge for a city   GET /orders/delivery-charge?city=Dhaka
+router.get("/delivery-charge", getDeliveryChargeEndpoint);
+
+// Place order from Buy Now / Cart / Wishlist
 router.post("/checkout", checkoutOrder);
 
-// Admin-only: Retrieve all customer orders in system
-router.get("/", verifyJWT, verifyAdmin, getOrders);
-
-// Public Order Tracking
+// Track order by orderId string (public)
 router.get("/track/:orderId", trackOrder);
 
-// Admin / Guest: Extract individual order details
+// Customer self-cancel (pending orders only)   POST /orders/cancel/:orderId
+router.post("/cancel/:orderId", cancelOrderByCustomer);
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+
+// All orders
+router.get("/", verifyJWT, verifyAdmin, getOrders);
+
+// Single order detail
 router.get("/:id", getOrderById);
 
-// Admin-only: Update shipping statuses or payment completions
+// Update order/payment status
 router.patch("/status/:id", verifyJWT, verifyAdmin, updateOrderStatus);
 
 export default router;
