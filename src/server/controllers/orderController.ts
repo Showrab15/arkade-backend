@@ -1097,18 +1097,24 @@ export const checkoutOrder = async (req: AuthenticatedRequest, res: Response) =>
 
     // --- POST ORDER HOUSEKEEPING ---
     // If successful, scrub cart/wishlist entries to satisfy checkout rules
-    if (checkoutFrom === "cart") {
-      await cartsCollection.deleteMany({
-        sessionId,
-        _id: { $or: cartIds.map((id: string) => ({ _id: id })) } as any
-      });
-    } else if (checkoutFrom === "wishlist") {
-      await wishlistsCollection.deleteMany({
-        sessionId,
-        _id: { $or: wishlistIds.map((id: string) => ({ _id: id })) } as any
-      });
-    }
-
+   // Remove cart/wishlist items after successful order placement
+  if (checkoutFrom === "cart") {
+  try {
+    // Simply wipe all cart items for this session — they were all checked out
+    const deleteResult = await cartsCollection.deleteMany({ sessionId });
+    console.log(`🛒 Cleared ${deleteResult.deletedCount} cart item(s) for session ${sessionId}`);
+  } catch (cartErr) {
+    console.error("⚠️ Failed to clear cart after order:", cartErr);
+  }
+} else if (checkoutFrom === "wishlist") {
+  try {
+    const deleteResult = await wishlistsCollection.deleteMany({ sessionId });
+    console.log(`💝 Cleared ${deleteResult.deletedCount} wishlist item(s) for session ${sessionId}`);
+  } catch (wishErr) {
+    console.error("⚠️ Failed to clear wishlist after order:", wishErr);
+  }
+}
+ 
     return sendSuccess(res, "Order placed successfully!", {
       id: orderResult.insertedId,
       orderId,
