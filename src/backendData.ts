@@ -98,6 +98,62 @@ export const API_ROUTES: ApiRoute[] = [
     }
   },
   {
+    id: "auth-get-profile",
+    module: "Auth",
+    method: "GET",
+    path: "/api/auth/profile",
+    description: "Retrieve standard logged-in user's profile detail card, including role, validation, address, phone text and district.",
+    authRequired: true,
+    responseBody: {
+      success: true,
+      message: "User profile retrieved successfully.",
+      data: {
+        id: "60c72b2f9b1d8e23456789a3",
+        email: "supto50showrab@gmail.com",
+        name: "Holmes Colon",
+        isVerified: true,
+        role: "user",
+        createdAt: "2026-05-29T19:54:15.315Z",
+        firebaseUid: "umQL81rhi7RML2OO8NVJqsTOWKu2",
+        image: "",
+        phone: "01700000000",
+        address: "123 Main Street, Dhaka",
+        district: "Dhaka"
+      }
+    }
+  },
+  {
+    id: "auth-update-profile",
+    module: "Auth",
+    method: "PUT",
+    path: "/api/auth/profile",
+    description: "Update the authenticated user's profile parameters. All params are optional.",
+    authRequired: true,
+    requestBody: {
+      name: "Holmes Colon Updated",
+      phone: "01712345678",
+      address: "House 4, Road 12, Banani",
+      district: "Dhaka"
+    },
+    responseBody: {
+      success: true,
+      message: "Profile updated successfully.",
+      data: {
+        id: "60c72b2f9b1d8e23456789a3",
+        email: "supto50showrab@gmail.com",
+        name: "Holmes Colon Updated",
+        isVerified: true,
+        role: "user",
+        createdAt: "2026-05-29T19:54:15.315Z",
+        firebaseUid: "umQL81rhi7RML2OO8NVJqsTOWKu2",
+        image: "",
+        phone: "01712345678",
+        address: "House 4, Road 12, Banani",
+        district: "Dhaka"
+      }
+    }
+  },
+  {
     id: "auth-get-users",
     module: "Auth",
     method: "GET",
@@ -550,8 +606,8 @@ export const API_ROUTES: ApiRoute[] = [
     module: "Orders",
     method: "POST",
     path: "/api/orders/checkout",
-    description: "Master checkout placement. Supports 'buynow' (single item card), 'cart' (consolidated checkout with subsequent cart clearance), and 'wishlist' origins. Includes bKash initialization payload for frontend client bridge preparation.",
-    authRequired: false,
+    description: "Master checkout placement. Supports 'buynow' (single item card), 'cart' (consolidated checkout with subsequent cart clearance), and 'wishlist' origins. Includes bKash initialization payload for frontend client bridge preparation. Requires active user session token.",
+    authRequired: true,
     requestBody: {
       checkoutInfo: {
         userName: "Khaled Mahmud",
@@ -585,6 +641,37 @@ export const API_ROUTES: ApiRoute[] = [
           currency: "BDT"
         }
       }
+    }
+  },
+  {
+    id: "orders-my-orders",
+    module: "Orders",
+    method: "GET",
+    path: "/api/orders/my-orders",
+    description: "Retrieve a custom customer array of all historic orders placed by the currently logged-in user under their account details.",
+    authRequired: true,
+    responseBody: {
+      success: true,
+      message: "Successfully retrieved your personal orders list.",
+      data: [
+        {
+          _id: "60d22f7e4f3c7eab12345699",
+          orderId: "BK-1716837292120-412",
+          userId: "60c72b2f9b1d8e23456789a3",
+          checkoutInfo: {
+            userName: "Khaled Mahmud",
+            email: "supto50showrab@gmail.com",
+            phone: "+8801700112233",
+            address: "House 24, Road 4, Sector 12",
+            city: "Dhaka"
+          },
+          paymentMethod: "bKash",
+          paymentStatus: "pending",
+          totalAmount: 2500,
+          orderStatus: "pending",
+          createdAt: "2026-06-06T19:30:15Z"
+        }
+      ]
     }
   },
   {
@@ -712,26 +799,93 @@ export const API_ROUTES: ApiRoute[] = [
       }
     }
   },
+  {
+    id: "orders-delivery-charge",
+    module: "Orders",
+    method: "GET",
+    path: "/api/orders/delivery-charge",
+    description: "Calculate delivery charge dynamically based on districtId, or district Name field. Returns 130 BDT for inside Dhaka and 70 BDT for outside Dhaka.",
+    authRequired: false,
+    responseBody: {
+      success: true,
+      deliveryCharge: 130,
+      districtId: "26",
+      divisionId: "3",
+      message: "Delivery charge calculated successfully for Dhaka."
+    }
+  },
 
-  // --- DISTRICTS ---
+  // --- LOCATIONS ---
+  {
+    id: "divisions-list",
+    module: "Districts",
+    method: "GET",
+    path: "/api/divisions",
+    description: "Query all administrative divisions of Bangladesh loaded directly from DB. Standardised output payload format.",
+    authRequired: false,
+    responseBody: {
+      success: true,
+      data: [
+        {
+          id: "3",
+          name: "Dhaka",
+          bn_name: "ঢাকা",
+          url: "www.dhakadiv.gov.bd"
+        }
+      ],
+      message: "Successfully retrieved all divisions.",
+      total: 8,
+      timestamp: "2026-06-06T19:30:15Z"
+    }
+  },
   {
     id: "districts-list",
     module: "Districts",
     method: "GET",
     path: "/api/districts",
-    description: "Query all 64 districts of Bangladesh categorized by the 8 administrative divisions. Promotes smooth frontend selector populates.",
+    description: "Query all 64 districts under 8 divisions of Bangladesh flatly formatted directly from MongoDB.",
     authRequired: false,
     responseBody: {
       success: true,
-      message: "Retrieved all 64 districts under 8 divisions of Bangladesh successfully.",
-      data: {
-        divisions: [
-          {
-            division: "Dhaka",
-            districts: ["Dhaka", "Gazipur", "Narayanganj", "Tangail", "Faridpur"]
-          }
-        ]
-      }
+      data: [
+        {
+          id: "1",
+          division_id: "3",
+          name: "Dhaka",
+          bn_name: "ঢাকা",
+          lat: "23.7115253",
+          lon: "90.4111451",
+          url: "www.dhaka.gov.bd"
+        }
+      ],
+      message: "Successfully retrieved all districts.",
+      total: 64,
+      timestamp: "2026-06-06T19:30:15Z"
+    }
+  },
+  {
+    id: "districts-by-division",
+    module: "Districts",
+    method: "GET",
+    path: "/api/districts/:divisionId",
+    description: "Retrieve list of all districts belonging to a specific administrative division ID.",
+    authRequired: false,
+    responseBody: {
+      success: true,
+      data: [
+        {
+          id: "1",
+          division_id: "3",
+          name: "Dhaka",
+          bn_name: "ঢাকা",
+          lat: "23.7115253",
+          lon: "90.4111451",
+          url: "www.dhaka.gov.bd"
+        }
+      ],
+      message: "Successfully retrieved districts for division.",
+      total: 13,
+      timestamp: "2026-06-06T19:30:15Z"
     }
   }
 ];
@@ -779,7 +933,20 @@ export const generatePostmanCollectionJson = (baseUrl: string): string => {
             }
           },
           {
-            name: "Get Bangladesh Shipping Districts",
+            name: "Get Bangladesh Divisions List",
+            request: {
+              method: "GET",
+              header: [],
+              url: {
+                raw: "{{baseUrl}}/api/divisions",
+                host: ["{{baseUrl}}"],
+                path: ["api", "divisions"]
+              },
+              description: "Retrieve list of all 8 administrative divisions of Bangladesh."
+            }
+          },
+          {
+            name: "Get Bangladesh Shipping Districts (All Flat)",
             request: {
               method: "GET",
               header: [],
@@ -788,7 +955,45 @@ export const generatePostmanCollectionJson = (baseUrl: string): string => {
                 host: ["{{baseUrl}}"],
                 path: ["api", "districts"]
               },
-              description: "Retrieve Division and Shipping location lists for dropdowns."
+              description: "Retrieve a flat collection of all 64 districts in Bangladesh."
+            }
+          },
+          {
+            name: "Get Districts by Division ID",
+            request: {
+              method: "GET",
+              header: [],
+              url: {
+                raw: "{{baseUrl}}/api/districts/:divisionId",
+                host: ["{{baseUrl}}"],
+                path: ["api", "districts", ":divisionId"],
+                variable: [
+                  {
+                    key: "divisionId",
+                    value: "3"
+                  }
+                ]
+              },
+              description: "Retrieve list of districts filtered under a specific division code (e.g. 3 for Dhaka)."
+            }
+          },
+          {
+            name: "Calculate Delivery Charge",
+            request: {
+              method: "GET",
+              header: [],
+              url: {
+                raw: "{{baseUrl}}/api/orders/delivery-charge?district=Dhaka",
+                host: ["{{baseUrl}}"],
+                path: ["api", "orders", "delivery-charge"],
+                query: [
+                  {
+                    key: "district",
+                    value: "Dhaka"
+                  }
+                ]
+              },
+              description: "Query delivery cost calculated dynamically based on district or districtId parameter."
             }
           }
         ]
