@@ -12,7 +12,7 @@ import productRoutes from "./src/server/routes/productRoutes.js";
 import cartRoutes from "./src/server/routes/cartRoutes.js";
 import wishlistRoutes from "./src/server/routes/wishlistRoutes.js";
 import orderRoutes from "./src/server/routes/orderRoutes.js";
-import { BANGLADESH_DISTRICTS } from "./src/server/controllers/orderController.js";
+import locationRoutes from "./src/server/routes/locationRoutes.js";
 
 export async function createExpressApp() {
   const app = express();
@@ -34,18 +34,7 @@ export async function createExpressApp() {
     });
   });
 
-  // Flat Bangladesh districts list alias for simple, global root api query
-  app.get("/api/districts", (req, res) => {
-    const flatList = BANGLADESH_DISTRICTS.reduce((acc, curr) => acc.concat(curr.districts), [] as string[]);
-    res.json({
-      success: true,
-      message: "Retrieved all 64 districts of Bangladesh categorized by Division.",
-      data: {
-        divisions: BANGLADESH_DISTRICTS,
-        flatList
-      }
-    });
-  });
+  
 
   // Mount Modular Backend Routes
   app.use("/api/auth", authRoutes);
@@ -55,6 +44,7 @@ export async function createExpressApp() {
   app.use("/api/cart", cartRoutes);
   app.use("/api/wishlist", wishlistRoutes);
   app.use("/api/orders", orderRoutes);
+app.use("/api", locationRoutes);   // covers /api/divisions, /api/districts, /api/districts/:divisionId
 
   // Global Express 404 handler for unmatched /api routes
   app.use("/api/*", (req, res) => {

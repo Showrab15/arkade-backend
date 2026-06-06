@@ -569,10 +569,11 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
 // 1. DELIVERY CHARGE CONSTANTS  ─────────────────────────────────────────────
 //    Add near the top of the file, alongside BANGLADESH_DISTRICTS
+const INSIDE_DHAKA_DISTRICT_ID = "36"; // Dhaka district
 
 export const DELIVERY_CHARGES = {
-  INSIDE_DHAKA: 70,
-  OUTSIDE_DHAKA: 130,
+  INSIDE_DHAKA:  70,
+  OUTSIDE_DHAKA:  130,
 } as const;
 
 // Districts that count as "inside Dhaka" for delivery pricing
@@ -586,35 +587,64 @@ const DHAKA_DIVISION_DISTRICTS = [
  * Returns the delivery charge for a given city string.
  * Exported so the frontend can call GET /orders/delivery-charge?city=Dhaka
  */
-export function getDeliveryCharge(city: string): number {
-  const normalized = city?.trim().toLowerCase() ?? "";
-  // Explicit override strings
-  if (normalized === "inside dhaka") return DELIVERY_CHARGES.INSIDE_DHAKA;
-  if (normalized === "outside dhaka") return DELIVERY_CHARGES.OUTSIDE_DHAKA;
-  return DHAKA_DIVISION_DISTRICTS.includes(normalized)
-    ? DELIVERY_CHARGES.INSIDE_DHAKA
-    : DELIVERY_CHARGES.OUTSIDE_DHAKA;
-}
+export const getDeliveryCharge = (districtIdOrName: string): number => {
+  const val = districtIdOrName.trim();
+  // ID-based check (new flow)
+  if (val === INSIDE_DHAKA_DISTRICT_ID) return DELIVERY_CHARGES.INSIDE_DHAKA;
+  // Name-based fallback (legacy / checkout flow)
+  if (val.toLowerCase() === "dhaka")    return DELIVERY_CHARGES.INSIDE_DHAKA;
+  return DELIVERY_CHARGES.OUTSIDE_DHAKA;
+};
 
 
 // 2. DELIVERY CHARGE ENDPOINT  ──────────────────────────────────────────────
 //    GET /api/orders/delivery-charge?city=Dhaka
 //    Frontend calls this during checkout to show the charge before placing order.
 
-export const getDeliveryChargeEndpoint = (req: Request, res: Response) => {
-  const { city } = req.query as { city?: string };
-  if (!city || city.trim() === "") {
-    return sendValidationError(res, "City is required to calculate delivery charge.", {
-      city: "Provide ?city=Dhaka in the query string.",
+/**
+ * GET /api/orders/delivery-charge?districtId=26
+ * GET /api/orders/delivery-charge?districtId=26&divisionId=6  (divisionId optional)
+ *
+ * Legacy fallback still works:
+ * GET /api/orders/delivery-charge?city=Rangpur
+ */
+export const getDeliveryChargeEndpoint = async (req: Request, res: Response) => {
+  const { districtId, city } = req.query as Record<string, string>;
+
+  if (districtId) {
+    const districtsCollection = getCollection("districts");
+
+    const district = await districtsCollection.findOne({ id: districtId });
+
+    if (!district) {
+      return sendError(res, "District not found.", null, 404);
+    }
+
+    const charge = getDeliveryCharge(districtId);
+    const zone = charge === DELIVERY_CHARGES.INSIDE_DHAKA ? "inside_dhaka" : "outside_dhaka";
+
+    return sendSuccess(res, "Delivery charge calculated.", {
+      city:           district.name,
+      districtId:     district.id,
+      deliveryCharge: charge,
+      currency:       "BDT",
+      zone,
     });
   }
-  const charge = getDeliveryCharge(city);
-  return sendSuccess(res, "Delivery charge calculated.", {
-    city: city.trim(),
-    deliveryCharge: charge,
-    currency: "BDT",
-    zone: charge === DELIVERY_CHARGES.INSIDE_DHAKA ? "inside_dhaka" : "outside_dhaka",
-  });
+
+  if (city) {
+    const charge = getDeliveryCharge(city);
+    const zone = charge === DELIVERY_CHARGES.INSIDE_DHAKA ? "inside_dhaka" : "outside_dhaka";
+
+    return sendSuccess(res, "Delivery charge calculated.", {
+      city,
+      deliveryCharge: charge,
+      currency:       "BDT",
+      zone,
+    });
+  }
+
+  return sendError(res, "Please provide either districtId or city query parameter.", null, 400);
 };
 
 
