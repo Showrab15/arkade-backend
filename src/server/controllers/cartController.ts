@@ -6,25 +6,26 @@ const cartsCollection = getCollection("carts");
 const productsCollection = getCollection("products");
 
 /**
- * Helper to retrieve or establish a cart identifier session
+ * Reads session ID from header or query only.
+ * Deliberately excludes req.body to avoid early-parse conflicts on POST routes.
  */
 const getCartSessionId = (req: Request): string => {
-  // Try custom session header first, then query, then body, then default fallback
   return (
     (req.headers["x-cart-session-id"] as string) ||
     (req.query.cartSessionId as string) ||
-    (req.body.cartSessionId as string) ||
     "session_anonymous_guest"
   );
 };
 
 /**
- * Public: Add Product to Cart (No login required)
- * Payload: productId, quantity (default: 1)
+ * Public: Add Product to Cart
+ * Payload: productId, quantity (default: 1), size (required)
  */
 export const addToCart = async (req: Request, res: Response) => {
-  const { productId, quantity } = req.body;
-  const sessionId = getCartSessionId(req);
+  console.log("req.body →", req.body); // remove after confirming
+
+  const { productId, quantity, size } = req.body;
+  const sessionId = getCartSessionId(req); // after body destructure
 
   if (!productId) {
     return sendValidationError(res, "Cannot add to cart: missing argument", {
@@ -39,8 +40,15 @@ export const addToCart = async (req: Request, res: Response) => {
     });
   }
 
+  if (!size || typeof size !== "string" || size.trim() === "") {
+    return sendValidationError(res, "Size is required", {
+      size: "Please select a size before adding to cart."
+    });
+  }
+
+  const normalizedSize = size.trim().toUpperCase();
+
   try {
-    // Verify product exists first
     const product = await productsCollection.findOne({ _id: productId });
     if (!product) {
       return sendError(res, "Item cannot be added to cart: product not found in catalog.", null, 404);
@@ -50,31 +58,31 @@ export const addToCart = async (req: Request, res: Response) => {
       return sendError(res, "Cannot add item: this product is currently out of stock.", null, 400);
     }
 
-    // Check if item is already in this session's cart
-    const existingCartItem = await cartsCollection.findOne({ sessionId, productId });
+    const existingCartItem = await cartsCollection.findOne({
+      sessionId,
+      productId,
+      size: normalizedSize
+    });
 
     if (existingCartItem) {
-      // If user sends quantity directly, we overwrite or accumulate. The prompt says: "if user increases quantity, updated quantity will be sent."
-      // This means we overwrite the quantity matching what frontend sends
       await cartsCollection.updateOne(
         { _id: existingCartItem._id },
         { $set: { quantity: requestedQuantity } }
       );
     } else {
-      // Create new cart entry
-      const newCartItem = {
+      await cartsCollection.insertOne({
         sessionId,
         productId,
+        size: normalizedSize,
         quantity: requestedQuantity,
         createdAt: new Date().toISOString()
-      };
-      await cartsCollection.insertOne(newCartItem);
+      });
     }
 
-    // Return detailed Cart response to fulfill the user's specs
     return sendSuccess(res, "Cart updated successfully.", {
       sessionId,
       productId,
+      size: normalizedSize,
       quantity: requestedQuantity
     });
   } catch (error) {
@@ -105,21 +113,21 @@ export const getCartData = async (req: Request, res: Response) => {
         resolvedItems.push({
           cartItemId: item._id,
           productId: item.productId,
+          size: item.size,
           name: product.name,
           productCode: product.productCode,
           price: product.price,
           color: product.color,
           images: product.images,
-          size: product.size,
           category: product.category,
           quantity: item.quantity,
           subtotal
         });
       } else {
-        // Handle dangling cart item gracefully by keeping its record but noting product is gone
         resolvedItems.push({
           cartItemId: item._id,
           productId: item.productId,
+          size: item.size,
           name: "Unavailable Product",
           price: 0,
           quantity: item.quantity,
@@ -141,18 +149,30 @@ export const getCartData = async (req: Request, res: Response) => {
 };
 
 /**
- * Public: Remove a specific item from Cart by productId
+ * Public: Remove item by productId + size
+ * Route: DELETE /:productId?size=M
  */
 export const deleteCartItem = async (req: Request, res: Response) => {
   const { productId } = req.params;
+  const { size } = req.query;
   const sessionId = getCartSessionId(req);
 
   if (!productId) {
-    return sendValidationError(res, "Missing parameter", { productId: "Product ID parameter is required." });
+    return sendValidationError(res, "Missing parameter", {
+      productId: "Product ID is required."
+    });
   }
 
+  if (!size || typeof size !== "string" || size.trim() === "") {
+    return sendValidationError(res, "Missing parameter", {
+      size: "Size query param is required. e.g. DELETE /cart/:productId?size=M"
+    });
+  }
+
+  const normalizedSize = size.trim().toUpperCase();
+
   try {
-    const query = { sessionId, productId };
+    const query = { sessionId, productId, size: normalizedSize };
     const cartItem = await cartsCollection.findOne(query);
 
     if (!cartItem) {
@@ -160,7 +180,12 @@ export const deleteCartItem = async (req: Request, res: Response) => {
     }
 
     await cartsCollection.deleteOne(query);
-    return sendSuccess(res, "Product removed from cart successfully.", { productId, sessionId });
+
+    return sendSuccess(res, "Product removed from cart successfully.", {
+      productId,
+      size: normalizedSize,
+      sessionId
+    });
   } catch (error) {
     return sendError(res, "Failed to delete item from cart.", error, 500);
   }

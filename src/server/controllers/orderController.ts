@@ -95,6 +95,7 @@ export const checkoutOrder = async (req: Request, res: Response) => {
   if (!userName || userName.trim() === "") errors.userName = "UserName field is mandatory.";
   if (!phone || phone.trim() === "") errors.phone = "Phone number is mandatory.";
   if (!address || address.trim() === "") errors.address = "Delivery address is mandatory.";
+
   if (!city || city.trim() === "") {
     errors.city = "City parameter is mandatory.";
   } else {
@@ -102,11 +103,13 @@ export const checkoutOrder = async (req: Request, res: Response) => {
     const isValidDistrict = flatDistrictsList.some(
       (d) => d.toLowerCase() === normalizedCity
     );
+
     if (
       !isValidDistrict &&
       !["inside dhaka", "outside dhaka"].includes(normalizedCity)
     ) {
-      errors.cityWarning = `City not a recognised BD district but accepted. Charge applied as outside Dhaka.`;
+      errors.cityWarning =
+        "City not a recognised BD district but accepted. Charge applied as outside Dhaka.";
     }
   }
 
@@ -130,27 +133,32 @@ export const checkoutOrder = async (req: Request, res: Response) => {
       name: string;
       price: number;
       quantity: number;
+      size?: string;
       color: string;
       images: string[];
       subtotal: number;
     }> = [];
 
     let itemsTotal = 0;
+    let checkedOutCartIds: string[] = [];
+    let checkedOutWishlistIds: string[] = [];
 
-    // ── CASE A: Buy Now ────────────────────────────────────────────────────
     if (checkoutFrom === "buynow") {
       if (!productId) {
         return sendValidationError(res, "Missing details", {
           productId: "productId is required for Buy Now.",
         });
       }
+
       const product = await productsCollection.findOne({ _id: productId });
       if (!product) return sendError(res, "Product not found.", null, 404);
-      if (product.status === "stockout")
+      if (product.status === "stockout") {
         return sendError(res, "Item is out of stock.", null, 400);
+      }
 
       const orderQty = quantity ? Number(quantity) : 1;
       const subtotal = product.price * orderQty;
+
       itemsTotal = subtotal;
       purchasedItems.push({
         productId: product._id.toString(),
@@ -163,30 +171,40 @@ export const checkoutOrder = async (req: Request, res: Response) => {
       });
     }
 
-    // ── CASE B: Cart ───────────────────────────────────────────────────────
     else if (checkoutFrom === "cart") {
       if (!Array.isArray(cartIds) || cartIds.length === 0) {
         return sendValidationError(res, "Missing details", {
           cartIds: "cartIds array is required.",
         });
       }
+
+      checkedOutCartIds = cartIds.map(String);
+
       const sessionCart = await cartsCollection.find({ sessionId }).toArray();
+
       const filteredCart = sessionCart.filter((item) =>
-        cartIds.includes(item._id.toString())
+        checkedOutCartIds.includes(item._id.toString())
       );
-      if (filteredCart.length === 0)
+
+      if (filteredCart.length === 0) {
         return sendError(res, "No matching cart items found.", null, 400);
+      }
 
       for (const cartItem of filteredCart) {
-        const product = await productsCollection.findOne({ _id: cartItem.productId });
+        const product = await productsCollection.findOne({
+          _id: cartItem.productId,
+        });
+
         if (product) {
           const subtotal = product.price * cartItem.quantity;
           itemsTotal += subtotal;
+
           purchasedItems.push({
             productId: product._id.toString(),
             name: product.name,
             price: product.price,
             quantity: cartItem.quantity,
+            size: cartItem.size,
             color: product.color || "",
             images: product.images || [],
             subtotal,
@@ -195,25 +213,34 @@ export const checkoutOrder = async (req: Request, res: Response) => {
       }
     }
 
-    // ── CASE C: Wishlist ───────────────────────────────────────────────────
     else if (checkoutFrom === "wishlist") {
       if (!Array.isArray(wishlistIds) || wishlistIds.length === 0) {
         return sendValidationError(res, "Missing details", {
           wishlistIds: "wishlistIds array is required.",
         });
       }
+
+      checkedOutWishlistIds = wishlistIds.map(String);
+
       const sessionWish = await wishlistsCollection.find({ sessionId }).toArray();
+
       const filteredWish = sessionWish.filter((item) =>
-        wishlistIds.includes(item._id.toString())
+        checkedOutWishlistIds.includes(item._id.toString())
       );
-      if (filteredWish.length === 0)
+
+      if (filteredWish.length === 0) {
         return sendError(res, "No matching wishlist items found.", null, 400);
+      }
 
       for (const wishItem of filteredWish) {
-        const product = await productsCollection.findOne({ _id: wishItem.productId });
+        const product = await productsCollection.findOne({
+          _id: wishItem.productId,
+        });
+
         if (product) {
           const subtotal = product.price;
           itemsTotal += subtotal;
+
           purchasedItems.push({
             productId: product._id.toString(),
             name: product.name,
@@ -231,15 +258,14 @@ export const checkoutOrder = async (req: Request, res: Response) => {
       return sendError(res, "Cannot place empty order.", null, 400);
     }
 
-    // ── DELIVERY CHARGE ────────────────────────────────────────────────────
     const deliveryCharge = getDeliveryCharge(city);
     const deliveryZone =
       deliveryCharge === DELIVERY_CHARGES.INSIDE_DHAKA
         ? "inside_dhaka"
         : "outside_dhaka";
+
     const totalAmount = itemsTotal + deliveryCharge;
 
-    // ── BKASH PAYLOAD ──────────────────────────────────────────────────────
     let paymentGatewayStatus = "not_applicable";
     let bkashTransactionPayload = null;
 
@@ -255,8 +281,7 @@ export const checkoutOrder = async (req: Request, res: Response) => {
         amount: totalAmount,
         currency: "BDT",
         intent: "sale",
-        instructions:
-          "Prepare frontend to direct checkout frame to bKash gateway.",
+        instructions: "Prepare frontend to direct checkout frame to bKash gateway.",
       };
     }
 
@@ -275,24 +300,28 @@ export const checkoutOrder = async (req: Request, res: Response) => {
       paymentStatus: paymentMethod === "COD" ? "unpaid" : "pending",
       paymentDetails: bkashTransactionPayload,
       orderedItems: purchasedItems,
-      itemsTotal,          // subtotal before delivery
-      deliveryCharge,      // ← NEW
-      deliveryZone,        // ← NEW  "inside_dhaka" | "outside_dhaka"
-      totalAmount,         // itemsTotal + deliveryCharge
+      itemsTotal,
+      deliveryCharge,
+      deliveryZone,
+      totalAmount,
       orderStatus: "pending",
       createdAt: new Date().toISOString(),
     };
 
     const orderResult = await ordersCollection.insertOne(newOrder);
 
-    // Decrement inventory
     try {
       for (const item of purchasedItems) {
-        const product = await productsCollection.findOne({ _id: item.productId });
+        const product = await productsCollection.findOne({
+          _id: item.productId,
+        });
+
         if (product) {
           const currentQty =
             typeof product.quantity === "number" ? product.quantity : 50;
+
           const updatedQty = Math.max(0, currentQty - (item.quantity || 1));
+
           await productsCollection.updateOne(
             { _id: item.productId },
             {
@@ -308,16 +337,21 @@ export const checkoutOrder = async (req: Request, res: Response) => {
       console.error("Failed to decrement inventory:", invError);
     }
 
-    // Housekeeping
     if (checkoutFrom === "cart") {
+      const cartObjectIds = checkedOutCartIds.map((id) => toObjectId(id));
+
       await cartsCollection.deleteMany({
         sessionId,
-        _id: { $or: cartIds.map((id: string) => ({ _id: id })) } as any,
+        _id: { $in: cartObjectIds },
       });
-    } else if (checkoutFrom === "wishlist") {
+    }
+
+    if (checkoutFrom === "wishlist") {
+      const wishlistObjectIds = checkedOutWishlistIds.map((id) => toObjectId(id));
+
       await wishlistsCollection.deleteMany({
         sessionId,
-        _id: { $or: wishlistIds.map((id: string) => ({ _id: id })) } as any,
+        _id: { $in: wishlistObjectIds },
       });
     }
 
