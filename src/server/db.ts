@@ -1,7 +1,7 @@
 
 import { MongoClient, Db, ObjectId } from "mongodb";
 import dns from "dns";
-import { DISTRICTS_SEED, DIVISIONS_SEED } from "./data/locationData";
+import { DISTRICTS_SEED, DIVISIONS_SEED } from "./data/locationData.js";
 
 // Automatically sanitize MongoDB Connection string to ensure specials in passwords are URL encoded correctly
 function sanitizeMongoUri(uri: string): string {
