@@ -115,7 +115,9 @@ const allowedOrigins = [
   "https://www.weararkade.com",
   "https://www.weararkade.com/",
   "https://strong-sundae-df6ece.netlify.app/",
-  "https://strong-sundae-df6ece.netlify.app"
+  "https://strong-sundae-df6ece.netlify.app",
+  "https://stunning-biscochitos-71c058.netlify.app/",
+  "https://stunning-biscochitos-71c058.netlify.app"
 ];
 
 const corsOptions: cors.CorsOptions = {
