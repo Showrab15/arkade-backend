@@ -103,11 +103,16 @@ import cartRoutes from "./src/server/routes/cartRoutes.js";
 import wishlistRoutes from "./src/server/routes/wishlistRoutes.js";
 import orderRoutes from "./src/server/routes/orderRoutes.js";
 import locationRoutes from "./src/server/routes/locationRoutes.js";
+import { BANGLADESH_DISTRICTS } from "./src/server/controllers/orderController.js";
 
 const allowedOrigins = [
+  "http://localhost:3000",
   "http://localhost:3000/",
+  "http://localhost:3001",
   "http://localhost:3001/",
+  "https://weararkade.com",
   "https://weararkade.com/",
+  "https://www.weararkade.com",
   "https://www.weararkade.com/",
 ];
 
@@ -128,8 +133,10 @@ const corsOptions: cors.CorsOptions = {
 export async function createExpressApp() {
   const app = express();
 
-  // Initialize Database native driver (bypasses crashes gracefully with fallback)
-  await connectToDatabase();
+  // Initialize Database native driver in the background to avoid blocking serverless boots/cold starts
+  connectToDatabase().catch((err) => {
+    console.error("⚠️ Background DB connection startup error:", err);
+  });
 
   // Handle preflight OPTIONS requests before anything else
   app.options("*", cors(corsOptions));
@@ -149,6 +156,7 @@ export async function createExpressApp() {
   });
 
   // Mount Modular Backend Routes
+  app.use("/api", locationRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/newsletter", newsletterRoutes);
   app.use("/api/contacts", contactRoutes);
@@ -156,7 +164,6 @@ export async function createExpressApp() {
   app.use("/api/cart", cartRoutes);
   app.use("/api/wishlist", wishlistRoutes);
   app.use("/api/orders", orderRoutes);
-  app.use("/api", locationRoutes); // covers /api/divisions, /api/districts, /api/districts/:divisionId
 
   // Global Express 404 handler for unmatched /api routes
   app.use("/api/*", (req, res) => {

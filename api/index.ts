@@ -1,4 +1,4 @@
-import { createExpressApp } from "../server.js";
+import { createExpressApp } from "../server.ts";
 
 // Keep a single instance warm across multiple serverless execution invokes
 let cachedAppPromise: any = null;
