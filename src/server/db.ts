@@ -175,7 +175,7 @@ export async function connectToDatabase(): Promise<{ db: Db | null; isFallback: 
   try {
     console.log("🔌 Attempting to connect to MongoDB...");
     mongoClient = new MongoClient(uri, {
-      serverSelectionTimeoutMS: 5000
+      serverSelectionTimeoutMS: 10000
     });
     await mongoClient.connect();
     mongoDb = mongoClient.db(dbName);

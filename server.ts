@@ -136,11 +136,10 @@ const corsOptions: cors.CorsOptions = {
 
 export async function createExpressApp() {
   const app = express();
+  await connectToDatabase();
 
   // Initialize Database native driver in the background to avoid blocking serverless boots/cold starts
-  connectToDatabase().catch((err) => {
-    console.error("⚠️ Background DB connection startup error:", err);
-  });
+ 
 
   // Handle preflight OPTIONS requests before anything else
   app.options("*", cors(corsOptions));
