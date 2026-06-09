@@ -129,7 +129,7 @@ const corsOptions: cors.CorsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-cart-session-id"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-cart-session-id", "x-wish-session-id"],
 };
 
 export async function createExpressApp() {
